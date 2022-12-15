@@ -133,10 +133,10 @@ LoadShaders :: proc (using GLContext :^gl_context) -> (Ok : bool)
   gl.UseProgram(RectShaderProgram.ID);
   
   RectVertices := [?]rect_vertex_attribute {
-    rect_vertex_attribute{Pos = {-0.5,  0.5}, UV = {0.0, 0.0}}, // up-left
-    rect_vertex_attribute{Pos = {-0.5, -0.5}, UV = {0.0, 1.0}}, // down-left
-    rect_vertex_attribute{Pos = { 0.5, -0.5}, UV = {1.0, 1.0}}, // down-right
-    rect_vertex_attribute{Pos = { 0.5,  0.5}, UV = {1.0, 0.0}}, // up-right
+    rect_vertex_attribute{Pos = {-0.5,  0.5}, UV = {0.0, 1.0}}, // up-left
+    rect_vertex_attribute{Pos = {-0.5, -0.5}, UV = {0.0, 0.0}}, // down-left
+    rect_vertex_attribute{Pos = { 0.5, -0.5}, UV = {1.0, 0.0}}, // down-right
+    rect_vertex_attribute{Pos = { 0.5,  0.5}, UV = {1.0, 1.0}}, // up-right
   }
   
   gl.GenVertexArrays(1, &RectShaderProgram.VAO);

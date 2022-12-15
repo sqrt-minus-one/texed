@@ -19,29 +19,109 @@ GlobalRequestClose :bool;
 WindowCallback :: proc "stdcall" (HWnd :win32.HWND, Msg :win32.UINT, wParam :win32.WPARAM, lParam :win32.LPARAM) -> win32.LRESULT
 {
   using win32;
-  if (Msg == WM_CLOSE)
+  switch Msg
   {
-    GlobalRequestClose = true;
+    case WM_CLOSE:
+    {
+      GlobalRequestClose = true;
+    }
   }
   return DefWindowProcW(HWnd, Msg, wParam, lParam);
 }
 
+Win32ResolveVKCode :: proc(VK : win32.WPARAM) -> (Result : ed.key)
+{
+  using win32;
+  switch VK
+  {
+    case VK_ESCAPE : Result = .Key_Esc;
+    case VK_F1..=VK_F24 : Result = .Key_F1 + ed.key(VK - VK_F1);
+    case VK_OEM_3 : Result = .Key_GraveAccent;
+    case '0'..='9' : Result = .Key_0 + ed.key(VK - '0');
+    case VK_OEM_MINUS : Result = .Key_Minus;
+    case VK_OEM_PLUS : Result = .Key_Plus;
+    case VK_BACK : Result = .Key_Backspace;
+    case VK_DELETE : Result = .Key_Delete;
+    case VK_TAB : Result = .Key_Tab;
+    case 'A' : Result = .Key_A + ed.key(VK - 'A');
+    case VK_SPACE : Result = .Key_Space;
+    case VK_RETURN : Result = .Key_Enter;
+    case VK_CONTROL : Result = .Key_Ctrl;
+    case VK_SHIFT : Result = .Key_Shift;
+    case VK_MENU : Result = .Key_Alt;
+    case VK_UP : Result = .Key_Up;
+    case VK_LEFT : Result = .Key_Left;
+    case VK_DOWN : Result = .Key_Down;
+    case VK_RIGHT : Result = .Key_Right;
+    case VK_PRIOR : Result = .Key_PageUp;
+    case VK_NEXT : Result = .Key_PageDown;
+    case VK_HOME : Result = .Key_Home;
+    case VK_END : Result = .Key_End;
+    case VK_OEM_2 : Result = .Key_ForwardSlash;
+    case VK_OEM_PERIOD : Result = .Key_Period;
+    case VK_OEM_COMMA : Result = .Key_Comma;
+    case VK_OEM_7 : Result = .Key_Quote;
+    case VK_OEM_4 : Result = .Key_LeftBracket;
+    case VK_OEM_6 : Result = .Key_RightBracket;
+  }
+  return;
+}
 
-ProcessPendingMessages :: proc()
+
+ProcessPendingMessages :: proc(Input :^ed.editor_input, Allocator :mem.Allocator = context.allocator)
 {
   using win32;
   Msg :MSG;
   for PeekMessageW(&Msg, nil, 0, 0, PM_REMOVE)
   {
+    Event :^ed.input_event;
+    
     switch Msg.message
     {
       case WM_QUIT: GlobalRequestClose = true;
-      case:
+      case WM_KEYDOWN, WM_KEYUP:
       {
-        TranslateMessage(&Msg);
-        DispatchMessageW(&Msg);
+        IsDown :=  (Msg.lParam & (1 << 31)) == 0;
+        WasDown := (Msg.lParam & (1 << 30)) != 0;
+        Event = ed.MakeInputEvent(Input, Allocator);
+        
+        Event.Kind = .KeyPress if IsDown  else .KeyRelease;
+        Event.Key = Win32ResolveVKCode(Msg.wParam);
+        
+        if (u16(GetKeyState(VK_CONTROL)) & u16(0x8000)) != 0
+        {
+          incl(&Event.Modifiers, ed.key_modifier.Ctrl);
+        }
+        if (u16(GetKeyState(VK_SHIFT)) & u16(0x8000)) != 0
+        {
+          incl(&Event.Modifiers, ed.key_modifier.Shift);
+        }
+        if (u16(GetKeyState(VK_MENU)) & u16(0x8000)) != 0
+        {
+          incl(&Event.Modifiers, ed.key_modifier.Alt);
+        }
+      }
+      
+      case WM_CHAR, WM_SYSCHAR:
+      {
+        CharInput := rune(Msg.wParam);
+        
+        if (CharInput >= 32 && CharInput != 127) || CharInput == '\t' || CharInput == '\n' || CharInput == '\r'
+        {
+          Event = ed.MakeInputEvent(Input, Allocator);
+          Event.Kind = .Text;
+          Event.Char = CharInput;
+        }
       }
     }
+    
+    if Event != nil
+    {
+      ed.PushEvent(Input, Event);
+    }
+    
+    TranslateMessage(&Msg);
+    DispatchMessageW(&Msg);
   }
 }
 
@@ -103,12 +183,12 @@ main:: proc()
     
     Renderer := renderer.MakeRenderer(Instance, WindowDC, context.allocator);
     ShowWindow(WindowHandle, 1);
-    EditorCtx := new(ed.editor_context);
+    EdCtx := new(ed.editor_context);
     
     for 
     {
       free_all(context.temp_allocator);
-      ProcessPendingMessages();
+      ProcessPendingMessages(&EdCtx.Input);
       if GlobalRequestClose
       {
         break;
@@ -125,9 +205,10 @@ main:: proc()
       }
       
       renderer.BeginRendererFrame(Renderer, ScreenDim);
-      ed.UpdateAndRender(EditorCtx, Renderer);
+      ed.UpdateAndRender(EdCtx, Renderer);
       renderer.EndRendererFrame(Renderer);
       
+      ed.ClearAllEvents(&EdCtx.Input);
     }
   }
 }

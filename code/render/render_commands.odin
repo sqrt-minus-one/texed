@@ -31,12 +31,13 @@ command_clear :: struct
   using Color : color_rgba,
 }
 
+/// the anchor is at center of the rectangle
 command_rect :: struct
 {
   using Header : command_header,
   Texture  : texture_id,
   Color    : color_rgba,
-  Center   : math.v2,
+  P        : math.v2,
   Size     : math.v2,
   UVScale  : math.v2,
   UVOffset : math.v2,
@@ -94,23 +95,10 @@ PushClearColor_V :: proc(RenderCommands : ^commands_buffer, Color : color_rgba)
 PushClearColor :: proc{PushClearColor_S, PushClearColor_V};
 
 
-PushRect :: proc(RenderCommands : ^commands_buffer, 
-                 Color   :color_rgba,
-                 Center  :math.v2,
-                 Size    :math.v2)
-{
-  Command := PushCommand(RenderCommands, command_rect);
-  Command.Texture  = RenderCommands.WhiteTexture;
-  Command.Color    = Color;
-  Command.Center   = Center;
-  Command.Size     = Size;
-  Command.UVScale  = math.V2(1, 1);
-  Command.UVOffset = math.V2(0, 0);
-  
-}
+
 
 PushImage :: proc(RenderCommands : ^commands_buffer, 
-                  Center   : math.v2,
+                  P        : math.v2,
                   Size     : math.v2,
                   Texture  : texture_id,
                   Color    : color_rgba,
@@ -120,8 +108,16 @@ PushImage :: proc(RenderCommands : ^commands_buffer,
   Command := PushCommand(RenderCommands, command_rect);
   Command.Texture  = Texture;
   Command.Color    = Color;
-  Command.Center   = Center;
+  Command.P        = P;
   Command.Size     = Size;
   Command.UVScale  = UVScale;
   Command.UVOffset = UVOffset;
+}
+
+PushRect :: proc(RenderCommands : ^commands_buffer, 
+                 P       :math.v2,
+                 Size    :math.v2,
+                 Color   :color_rgba,)
+{
+  PushImage(RenderCommands, P, Size, RenderCommands.WhiteTexture, Color);
 }

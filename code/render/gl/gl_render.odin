@@ -25,7 +25,7 @@ InitGL :: proc(GLContext : ^gl_context, allocator :mem.Allocator)
   render.InitRenderer(GLContext, allocator);
   
   TextureSize := math.v2u{1, 1};
-  WhiteColor :u32= 0xFF_FF_00_FF;
+  WhiteColor :u32= 0xFF_FF_FF_FF;
   GLContext.RenderCommands.WhiteTexture = ReserveTexture2D(GLContext, TextureSize, .RGB8);
   FillTexture2D(GLContext, GLContext.RenderCommands.WhiteTexture, TextureSize, &WhiteColor);
 }
@@ -79,9 +79,9 @@ EndFrame :: proc(GLContext : ^gl_context)
       {
         Command := cast(^command_rect)Header;
         
-        Trans := math.Translate(math.V3(Command.Center.x, Command.Center.y, 0.0));
-        Sclae := math.Scale(math.V3(Command.Size.x, Command.Size.y, 0.0));
-        Model := Trans * Sclae;
+        TransM := math.Translate(math.V3(Command.P.x, Command.P.y, 0.0));
+        ScaleM := math.Scale(math.V3(Command.Size.x, Command.Size.y, 0.0));
+        Model := TransM * ScaleM;
         
         using GLContext;
         gl.UseProgram(RectShaderProgram.ID);

@@ -17,8 +17,10 @@ glyph :: struct
   Advance  : f32,
 }
 
+// NOTE(fakhri): we assume mono spaced fonts only
 font :: struct
 {
+  GlyphWidth    : f32,
   GlyphMapFirst : i32,
   GlyphMapOpl   : i32,
   LineAdvance   : f32,
@@ -79,6 +81,8 @@ LoadFont :: proc(Renderer :^render.renderer_context, FontPath :string, FontScale
   InvWidth  := 1.0 / f32(AtlasSize.x);
   InvHeight := 1.0 / f32(AtlasSize.y);
   
+  Font.GlyphWidth = ChardataForRange[0].xadvance;
+  
   for Glyph, Index in &Glyphs
   {
     OffsetX := f32(0);
@@ -91,10 +95,12 @@ LoadFont :: proc(Renderer :^render.renderer_context, FontPath :string, FontScale
     
     Glyph.UVScale  = V2(abs(s1 - s0), abs(t1 - t0));
     Glyph.UVOffset = V2(s0, t0);
-    Glyph.Offset = V2(ChardataForRange[Index].xoff, ChardataForRange[Index].yoff2);
-    
     Glyph.Size     = Glyph.UVScale * ToV2(AtlasSize);
+    Glyph.Offset = V2(ChardataForRange[Index].xoff + 0.5 * Glyph.Size.x, ChardataForRange[Index].yoff2 - 0.5 * Glyph.Size.y);
     Glyph.Advance  = ChardataForRange[Index].xadvance;
+    
+    // TODO(fakhri): better recovery, like try a default monospaced font
+    if Glyph.Advance != Font.GlyphWidth do panic("Mono spaced only");
   }
   
   Font.GlyphMapFirst = DirectMapFirst;
@@ -114,11 +120,11 @@ LoadFont :: proc(Renderer :^render.renderer_context, FontPath :string, FontScale
 GetGlyphFromRune :: proc(Font :^font, Ch : rune) -> (Glyph : glyph)
 {
   GlyphIndex := int(Ch) - int(Font.GlyphMapFirst);
-  if GlyphIndex < len(Font.Glyphs) do Glyph = Font.Glyphs[GlyphIndex];
+  if GlyphIndex >= 0 && GlyphIndex < len(Font.Glyphs) do Glyph = Font.Glyphs[GlyphIndex];
   else
   {
     // TODO(fakhri): create a new glyph and bake it into the atlas
-    assert(false, "Not Implemented yet");
+    Glyph = Font.Glyphs[' ' - Font.GlyphMapFirst];
   }
   return;
 }
