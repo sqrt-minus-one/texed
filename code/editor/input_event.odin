@@ -1,6 +1,7 @@
 package editor
 
 import "core:mem"
+import "shared:base/math"
 
 input_event_kind :: enum
 {
@@ -98,6 +99,10 @@ key :: enum
   Key_Quote,
   Key_LeftBracket,
   Key_RightBracket,
+  
+  Key_LeftMouse,
+  Key_MiddleMouse,
+  Key_RightMouse,
 }
 
 key_modifier :: enum
@@ -114,6 +119,7 @@ input_event :: struct
   Key  : key,
   Char : rune,
   Modifiers :bit_set[key_modifier],
+  MouseP : math.v2,
 }
 
 editor_input :: struct
@@ -121,6 +127,7 @@ editor_input :: struct
   First : ^input_event,
   Last  : ^input_event,
   Free  : ^input_event,
+  Mouse : math.v2,
 }
 
 MakeInputEvent :: proc(Input :^editor_input, Allocator :mem.Allocator) -> (Result : ^input_event)

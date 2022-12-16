@@ -35,6 +35,7 @@ AdjustCursorPos :: proc(Text : string, Cursor : ^cursor)
   SafePos, NextPos :text_position;
   for Ch, Index in Text
   {
+    if SafePos.Col == Cursor.Col && SafePos.Row == Cursor.Row do break;
     if Ch == '\r' || Ch == '\n'
     {
       NextPos.Row += 1;
@@ -44,7 +45,6 @@ AdjustCursorPos :: proc(Text : string, Cursor : ^cursor)
     else do NextPos.Col += TAB_WIDTH if Ch == '\t' else 1;
     SafePos = NextPos;
     SafeOffset = Index + 1;
-    if SafePos.Col == Cursor.Col && SafePos.Row == Cursor.Row do break;
   }
   
   Cursor.Pos    = SafePos;
@@ -95,6 +95,8 @@ UpdateAndRender :: proc(EdCtx :^editor_context, Renderer : ^render.renderer_cont
     EdCtx.MainFont, Ok = LoadFont(Renderer, "data/fonts/consola.ttf", 20);
     if !Ok do logger.log(.Error, "Couldn't Load Font");
   }
+  
+  Font := &EdCtx.MainFont;
   
   // NOTE(fakhri): process input events
   {
@@ -149,6 +151,12 @@ UpdateAndRender :: proc(EdCtx :^editor_context, Renderer : ^render.renderer_cont
             {
               MoveCursorLeft(string(EdCtx.Buffer[:EdCtx.BufferSize]), &EdCtx.Cursor)
             }
+            case .Key_LeftMouse:
+            {
+              EdCtx.Cursor.Col = int(Event.MouseP.x / Font.GlyphWidth);
+              EdCtx.Cursor.Row = int(Event.MouseP.y / Font.LineAdvance);
+              AdjustCursorPos(string(EdCtx.Buffer[:EdCtx.BufferSize]), &EdCtx.Cursor);
+            }
           }
         }
         case .KeyRelease:
@@ -162,10 +170,8 @@ UpdateAndRender :: proc(EdCtx :^editor_context, Renderer : ^render.renderer_cont
   Height := f32(Renderer.ScreenDim.y);
   render.PushClipMatrix(Renderer, math.Orthographic(0, Width, Height, 0, -100, 100));
   
-  P := math.V2(0, 0);
-  Font := &EdCtx.MainFont;
-  
   // NOTE(fakhri): render buffer content
+  P := math.V2(0, 0);
   RenderText(Renderer,
              Font,
              string(EdCtx.Buffer[:EdCtx.BufferSize]), 
@@ -174,8 +180,9 @@ UpdateAndRender :: proc(EdCtx :^editor_context, Renderer : ^render.renderer_cont
   
   // NOTE(fakhri): render cursor
   {
+    LineGap := Font.LineAdvance - (Font.Ascent - Font.Descent);
     Pos := EdCtx.Cursor.Pos;
-    CursorPos := math.V2((f32(Pos.Col) + 0.5) * Font.GlyphWidth, (f32(Pos.Row) + 0.4) * Font.LineAdvance);
+    CursorPos := math.V2((f32(Pos.Col) + 0.5) * Font.GlyphWidth, (f32(Pos.Row) + 0.5) * Font.LineAdvance - LineGap);
     render.PushRect(RenderCommands = Renderer, 
                     P  = CursorPos,
                     Size = math.V2(Font.GlyphWidth, Font.Ascent - Font.Descent),
@@ -183,7 +190,7 @@ UpdateAndRender :: proc(EdCtx :^editor_context, Renderer : ^render.renderer_cont
     
     if EdCtx.Cursor.Offset < EdCtx.BufferSize 
     {
-      CharPos := math.V2((f32(Pos.Col)) * Font.GlyphWidth, (f32(Pos.Row) + 0.6) * Font.LineAdvance);
+      CharPos := math.V2((f32(Pos.Col)) * Font.GlyphWidth, (f32(Pos.Row) + 0.5) * Font.LineAdvance + LineGap);
       CharAtCursor := EdCtx.Buffer[EdCtx.Cursor.Offset];
       RenderCharacter(Renderer, Font, rune(CharAtCursor), CharPos, render.MakeColor(0, 0, 0, 1));
     }

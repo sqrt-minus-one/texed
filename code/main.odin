@@ -79,6 +79,28 @@ ProcessPendingMessages :: proc(Input :^ed.editor_input, Allocator :mem.Allocator
     switch Msg.message
     {
       case WM_QUIT: GlobalRequestClose = true;
+      case WM_MOUSEMOVE: Input.Mouse = math.V2(f32(GET_X_LPARAM(Msg.lParam)), f32(GET_Y_LPARAM(Msg.lParam)));
+      case WM_LBUTTONUP, WM_LBUTTONDOWN:
+      {
+        Event = ed.MakeInputEvent(Input, Allocator);
+        Event.Kind = .KeyPress if WM_LBUTTONDOWN == Msg.message else .KeyRelease;
+        Event.Key = .Key_LeftMouse;
+        Event.MouseP = Input.Mouse;
+      }
+      case WM_RBUTTONUP, WM_RBUTTONDOWN:
+      {
+        Event = ed.MakeInputEvent(Input, Allocator);
+        Event.Kind = .KeyPress if WM_RBUTTONDOWN == Msg.message else .KeyRelease;
+        Event.Key = .Key_RightMouse;
+        Event.MouseP = Input.Mouse;
+      }
+      case WM_MBUTTONUP, WM_MBUTTONDOWN:
+      {
+        Event = ed.MakeInputEvent(Input, Allocator);
+        Event.Kind = .KeyPress if WM_MBUTTONDOWN == Msg.message else .KeyRelease;
+        Event.Key = .Key_RightMouse;
+        Event.MouseP = Input.Mouse;
+      }
       case WM_KEYDOWN, WM_KEYUP:
       {
         IsDown :=  (Msg.lParam & (1 << 31)) == 0;
@@ -87,19 +109,6 @@ ProcessPendingMessages :: proc(Input :^ed.editor_input, Allocator :mem.Allocator
         
         Event.Kind = .KeyPress if IsDown  else .KeyRelease;
         Event.Key = Win32ResolveVKCode(Msg.wParam);
-        
-        if (u16(GetKeyState(VK_CONTROL)) & u16(0x8000)) != 0
-        {
-          incl(&Event.Modifiers, ed.key_modifier.Ctrl);
-        }
-        if (u16(GetKeyState(VK_SHIFT)) & u16(0x8000)) != 0
-        {
-          incl(&Event.Modifiers, ed.key_modifier.Shift);
-        }
-        if (u16(GetKeyState(VK_MENU)) & u16(0x8000)) != 0
-        {
-          incl(&Event.Modifiers, ed.key_modifier.Alt);
-        }
       }
       
       case WM_CHAR, WM_SYSCHAR:
@@ -117,6 +126,18 @@ ProcessPendingMessages :: proc(Input :^ed.editor_input, Allocator :mem.Allocator
     
     if Event != nil
     {
+      if (u16(GetKeyState(VK_CONTROL)) & u16(0x8000)) != 0
+      {
+        incl(&Event.Modifiers, ed.key_modifier.Ctrl);
+      }
+      if (u16(GetKeyState(VK_SHIFT)) & u16(0x8000)) != 0
+      {
+        incl(&Event.Modifiers, ed.key_modifier.Shift);
+      }
+      if (u16(GetKeyState(VK_MENU)) & u16(0x8000)) != 0
+      {
+        incl(&Event.Modifiers, ed.key_modifier.Alt);
+      }
       ed.PushEvent(Input, Event);
     }
     
@@ -158,6 +179,7 @@ main:: proc()
     lpfnWndProc = WindowCallback,
     hInstance = Instance,
     lpszClassName = const_utf16("EDITOR_CLASS"),
+    hCursor = LoadCursorA(nil, IDC_ARROW),
   }
   
   if RegisterClassW(&window_class) != 0

@@ -31,7 +31,8 @@ RenderText :: proc(Renderer : ^render.renderer_context,
                    P      :math.v2u,
                    Color  :render.color_rgba,)
 {
-  TextPos := math.V2((f32(P.x)) * Font.GlyphWidth, (f32(P.y) + 0.6) * Font.LineAdvance);
+  LineGap := Font.LineAdvance - (Font.Ascent - Font.Descent);
+  TextPos := math.V2((f32(P.x)) * Font.GlyphWidth, LineGap + (f32(P.y) + 0.5 ) * Font.LineAdvance);
   
   // NOTE(fakhri): render each character
   {
