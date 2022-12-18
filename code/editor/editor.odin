@@ -23,7 +23,7 @@ editor_context :: struct
   MainFont : font,
   Input  : editor_input,
   
-  Buffer : [1024]u8,
+  Buffer : [512]u8,
   BufferSize : int,
   // NOTE(fakhri): offset into the buffer
   Cursor : cursor,
@@ -108,9 +108,12 @@ UpdateAndRender :: proc(EdCtx :^editor_context, Renderer : ^render.renderer_cont
         {
           if EdCtx.BufferSize < len(EdCtx.Buffer)
           {
-            mem.copy(dst = &EdCtx.Buffer[EdCtx.Cursor.Offset + 1],
-                     src = &EdCtx.Buffer[EdCtx.Cursor.Offset],
-                     len = EdCtx.BufferSize - EdCtx.Cursor.Offset); 
+            if EdCtx.Cursor.Offset + 1 < len(EdCtx.Buffer)
+            {
+              mem.copy(dst = &EdCtx.Buffer[EdCtx.Cursor.Offset + 1],
+                       src = &EdCtx.Buffer[EdCtx.Cursor.Offset],
+                       len = EdCtx.BufferSize - EdCtx.Cursor.Offset); 
+            }
             EdCtx.BufferSize += 1;
             EdCtx.Buffer[EdCtx.Cursor.Offset] = u8(Event.Char);
             
@@ -127,9 +130,12 @@ UpdateAndRender :: proc(EdCtx :^editor_context, Renderer : ^render.renderer_cont
               {
                 MoveCursorLeft(string(EdCtx.Buffer[:EdCtx.BufferSize]), &EdCtx.Cursor);
                 
-                mem.copy(dst = &EdCtx.Buffer[EdCtx.Cursor.Offset],
-                         src = &EdCtx.Buffer[EdCtx.Cursor.Offset + 1],
-                         len = EdCtx.BufferSize - EdCtx.Cursor.Offset); 
+                if EdCtx.Cursor.Offset + 1 < len(EdCtx.Buffer)
+                {
+                  mem.copy(dst = &EdCtx.Buffer[EdCtx.Cursor.Offset],
+                           src = &EdCtx.Buffer[EdCtx.Cursor.Offset + 1],
+                           len = EdCtx.BufferSize - EdCtx.Cursor.Offset); 
+                }
                 EdCtx.BufferSize    -= 1;
               }
             }
