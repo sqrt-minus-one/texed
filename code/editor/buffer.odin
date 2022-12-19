@@ -8,52 +8,165 @@ buffer_chunk_offset :: struct
   Offset : int, // NOTE(fakhri): offset in the chunk
 }
 
-CHUNK_CAPACITY :: 512
+CHUNK_CAPACITY :: 3
+
 buffer_chunk :: struct
 {
   Next :^buffer_chunk,
+  Prev :^buffer_chunk,
   UsedSpace : int,
   Data : [CHUNK_CAPACITY]u8,
 }
 
 text_buffer :: struct
 {
-  First :^buffer_chunk,
+  First : buffer_chunk,
   Last  :^buffer_chunk,
+}
+
+MakeBufferChunk :: proc(Editor : ^editor_context) -> (Chunk : ^buffer_chunk)
+{
+  if Editor.FreeChunks != nil
+  {
+    Chunk = Editor.FreeChunks;
+    Editor.FreeChunks = Editor.FreeChunks.Next;
+    Chunk^ = buffer_chunk{};
+  }
+  if Chunk == nil do Chunk = new(buffer_chunk);
+  return;
 }
 
 InsertCharaterToBuffer :: proc(Editor : ^editor_context, Cursor : ^cursor, Char : u8)
 {
-  Chunk  := Cursor.ChunkOffset.Chunk;
-  Offset := Cursor.ChunkOffset.Offset;
-  if Chunk.UsedSpace < CHUNK_CAPACITY
+  ChunkOffset := &Cursor.ChunkOffset;
+  if ChunkOffset.Offset == CHUNK_CAPACITY
   {
-    if Offset + 1 < len(Chunk.Data)
+    if ChunkOffset.Chunk.Next != nil
     {
-      mem.copy(dst = &Chunk.Data[Offset + 1],
-               src = &Chunk.Data[Offset],
-               len = Chunk.UsedSpace - Offset); 
+      ChunkOffset.Chunk = ChunkOffset.Chunk.Next;
+      ChunkOffset.Offset = 0;
     }
-    Chunk.UsedSpace += 1;
-    Chunk.Data[Offset] = Char;
   }
   
-  MoveCursorRight(string(Chunk.Data[:Chunk.UsedSpace]), Cursor);
+  if ChunkOffset.Chunk.UsedSpace == CHUNK_CAPACITY
+  {
+    // NOTE(fakhri): create a new chunk and add it to the buffer
+    // right after chunk
+    
+    NewChunk := MakeBufferChunk(Editor);
+    assert(NewChunk != nil);
+    
+    if ChunkOffset.Chunk == Editor.Buffer.Last
+    {
+      Editor.Buffer.Last = NewChunk;
+    }
+    
+    NewChunk.Prev = ChunkOffset.Chunk;
+    NewChunk.Next = ChunkOffset.Chunk.Next;
+    if NewChunk.Next != nil
+    {
+      NewChunk.Next.Prev = NewChunk;
+    }
+    ChunkOffset.Chunk.Next = NewChunk;
+    
+    if ChunkOffset.Offset < CHUNK_CAPACITY
+    {
+      // NOTE(fakhri): copy everything after offset to the new chunk
+      mem.copy(dst = &NewChunk.Data[0],
+               src = &ChunkOffset.Chunk.Data[ChunkOffset.Offset],
+               len = ChunkOffset.Chunk.UsedSpace - ChunkOffset.Offset); 
+      NewChunk.UsedSpace = ChunkOffset.Chunk.UsedSpace - ChunkOffset.Offset;
+      ChunkOffset.Chunk.UsedSpace -= NewChunk.UsedSpace;
+    }
+    else
+    {
+      ChunkOffset.Chunk = NewChunk;
+      ChunkOffset.Offset = 0;
+    }
+  }
+  
+  if ChunkOffset.Offset + 1 < CHUNK_CAPACITY
+  {
+    mem.copy(dst = &ChunkOffset.Chunk.Data[ChunkOffset.Offset + 1],
+             src = &ChunkOffset.Chunk.Data[ChunkOffset.Offset],
+             len = ChunkOffset.Chunk.UsedSpace - ChunkOffset.Offset); 
+  }
+  ChunkOffset.Chunk.UsedSpace += 1;
+  ChunkOffset.Chunk.Data[ChunkOffset.Offset] = Char;
+  MoveCursorRight(&Editor.Buffer, Cursor);
 }
 
 DeleteCharacterFromBuffer :: proc(Editor : ^editor_context, Cursor : ^cursor)
 {
-  Chunk  := Cursor.ChunkOffset.Chunk;
-  if Chunk.UsedSpace > 0 && Cursor.ChunkOffset.Offset > 0
+  ChunkOffset := &Cursor.ChunkOffset;
+  
+  if ChunkOffset.Chunk.UsedSpace == 0
   {
-    MoveCursorLeft(string(Chunk.Data[:Chunk.UsedSpace]), Cursor);
-    Offset := Cursor.ChunkOffset.Offset;
-    if Offset + 1 < CHUNK_CAPACITY
+    // NOTE(fakhri): delete the chunk
+    ChunkToFree := ChunkOffset.Chunk;
+    PrevChunk := ChunkToFree.Prev;
+    NextChunk := ChunkToFree.Next;
+    if ChunkToFree != &Editor.Buffer.First
     {
-      mem.copy(dst = &Chunk.Data[Offset],
-               src = &Chunk.Data[Offset + 1],
-               len = Chunk.UsedSpace - Offset); 
+      if ChunkToFree == Editor.Buffer.Last
+      {
+        Editor.Buffer.Last = PrevChunk;
+        PrevChunk.Next = nil;
+      }
+      else
+      {
+        PrevChunk.Next = ChunkToFree.Next;
+        PrevChunk.Next.Prev = PrevChunk;
+      }
+      Cursor.ChunkOffset.Chunk = PrevChunk;
+      Cursor.ChunkOffset.Offset = PrevChunk.UsedSpace;
     }
-    Chunk.UsedSpace -= 1;
+    else
+    {
+      if NextChunk != nil
+      {
+        // NOTE(fakhri): copy the next chunk
+        // to the head of the buffer and free
+        // the next chunk
+        Editor.Buffer.First = NextChunk^;
+        ChunkToFree = NextChunk;
+        if ChunkToFree.Next != nil
+        {
+          // NOTE(fakhri): update the prev pointer of the next
+          // chunk
+          ChunkToFree.Next.Prev = &Editor.Buffer.First;
+        }
+        Cursor.ChunkOffset.Chunk = &Editor.Buffer.First;
+        Cursor.ChunkOffset.Offset = 0;
+      }
+      else
+      {
+        // NOTE(fakhri): nothing to free
+        ChunkToFree = nil;
+      }
+    }
+    
+    if ChunkToFree != nil
+    {
+      ChunkToFree.Next = Editor.FreeChunks;
+      Editor.FreeChunks = ChunkToFree;
+    }
+  }
+  
+  if ChunkOffset.Chunk.UsedSpace > 0 && MoveCursorLeft(&Editor.Buffer, Cursor)
+  {
+    if ChunkOffset.Offset + 1 < CHUNK_CAPACITY
+    {
+      mem.copy(dst = &ChunkOffset.Chunk.Data[ChunkOffset.Offset],
+               src = &ChunkOffset.Chunk.Data[ChunkOffset.Offset + 1],
+               len = ChunkOffset.Chunk.UsedSpace - ChunkOffset.Offset); 
+    }
+    ChunkOffset.Chunk.UsedSpace -= 1;
+  }
+  
+  if ChunkOffset.Offset == ChunkOffset.Chunk.UsedSpace && ChunkOffset.Chunk.Next != nil
+  {
+    ChunkOffset.Chunk = ChunkOffset.Chunk.Next;
+    ChunkOffset.Offset = 0;
   }
 }

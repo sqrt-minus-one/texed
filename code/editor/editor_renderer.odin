@@ -25,37 +25,41 @@ RenderCharacter :: proc(Renderer : ^render.renderer_context,
   return;
 }
 
-RenderText :: proc(Renderer : ^render.renderer_context, 
-                   Font : ^font, 
-                   Text : string, 
-                   P      :math.v2u,
-                   Color  :render.color_rgba,)
+RenderBuffer :: proc(Renderer : ^render.renderer_context, 
+                     Font : ^font, 
+                     Buffer : ^text_buffer, 
+                     P      :math.v2u,
+                     Color  :render.color_rgba,)
 {
   LineGap := Font.LineAdvance - (Font.Ascent - Font.Descent);
   TextPos := math.V2((f32(P.x)) * Font.GlyphWidth, LineGap + (f32(P.y) + 0.5 ) * Font.LineAdvance);
   
   // NOTE(fakhri): render each character
   {
-    for Ch in Text
+    for Chunk := &Buffer.First; Chunk != nil; Chunk = Chunk.Next
     {
-      CharColor := Color;
-      if Ch == '\r' || Ch == '\n'
+      Text := string(Chunk.Data[:Chunk.UsedSpace]);
+      for Ch in Text
       {
-        TextPos.y += Font.LineAdvance;
-        TextPos.x  = 0;
-        continue;
+        CharColor := Color;
+        if Ch == '\r' || Ch == '\n'
+        {
+          TextPos.y += Font.LineAdvance;
+          TextPos.x  = 0;
+          continue;
+        }
+        if Ch == '\t'
+        {
+          TextPos.x  += TAB_WIDTH * Font.GlyphWidth;
+          continue;
+        }
+        
+        TextPos.x += RenderCharacter(Renderer = Renderer,
+                                     Font = Font, 
+                                     Char = Ch, 
+                                     P    = TextPos,
+                                     Color=CharColor);
       }
-      if Ch == '\t'
-      {
-        TextPos.x  += TAB_WIDTH * Font.GlyphWidth;
-        continue;
-      }
-      
-      TextPos.x += RenderCharacter(Renderer = Renderer,
-                                   Font = Font, 
-                                   Char = Ch, 
-                                   P    = TextPos,
-                                   Color=CharColor);
     }
   }
 }
