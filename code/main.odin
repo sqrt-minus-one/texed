@@ -205,12 +205,12 @@ main:: proc()
     
     Renderer := renderer.MakeRenderer(Instance, WindowDC, context.allocator);
     ShowWindow(WindowHandle, 1);
-    EdCtx := new(ed.editor_context);
+    Editor := new(ed.editor_context);
     
     for 
     {
       free_all(context.temp_allocator);
-      ProcessPendingMessages(&EdCtx.Input);
+      ProcessPendingMessages(&Editor.Input);
       if GlobalRequestClose
       {
         break;
@@ -227,10 +227,10 @@ main:: proc()
       }
       
       renderer.BeginRendererFrame(Renderer, ScreenDim);
-      ed.UpdateAndRender(EdCtx, Renderer);
+      ed.UpdateAndRender(Editor, Renderer);
       renderer.EndRendererFrame(Renderer);
       
-      ed.ClearAllEvents(&EdCtx.Input);
+      ed.ClearAllEvents(&Editor.Input);
     }
   }
 }

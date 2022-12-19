@@ -6,6 +6,14 @@ import "core:mem"
 import "shared:render"
 import math "shared:base/math"
 
+/*
+ ** TODO(fakhri): things to think about:
+**  - handle big buffers
+**  - save/load buffers
+**  - history
+**  - scrolling
+*/
+
 text_position :: struct
 {
   Row, Col : int,
@@ -17,14 +25,19 @@ cursor :: struct
   using Pos : text_position,
 }
 
+text_buffer :: struct
+{
+  Data : [512]u8,
+  Size : int,
+}
+
 editor_context :: struct
 {
   IsInitialized :bool,
   MainFont : font,
   Input  : editor_input,
   
-  Buffer : [512]u8,
-  BufferSize : int,
+  Buffer : text_buffer,
   // NOTE(fakhri): offset into the buffer
   Cursor : cursor,
 }
@@ -85,39 +98,54 @@ MoveCursorLeft :: proc(Text : string, Cursor : ^cursor)
   }
 }
 
-UpdateAndRender :: proc(EdCtx :^editor_context, Renderer : ^render.renderer_context)
+InsertCharaterToBuffer :: proc(Buffer : ^text_buffer, Offset : int, Char : u8)
 {
-  if !EdCtx.IsInitialized
+  if Offset + 1 < len(Buffer.Data)
   {
-    EdCtx.IsInitialized = true;
+    mem.copy(dst = &Buffer.Data[Offset + 1],
+             src = &Buffer.Data[Offset],
+             len = Buffer.Size - Offset); 
+  }
+  Buffer.Size += 1;
+  Buffer.Data[Offset] = Char;
+}
+
+DeleteCharacterFromBuffer :: proc(Buffer : ^text_buffer, Offset : int)
+{
+  if Offset + 1 < len(Buffer.Data)
+  {
+    mem.copy(dst = &Buffer.Data[Offset],
+             src = &Buffer.Data[Offset + 1],
+             len = Buffer.Size - Offset); 
+  }
+  Buffer.Size -= 1;
+}
+
+UpdateAndRender :: proc(Editor :^editor_context, Renderer : ^render.renderer_context)
+{
+  if !Editor.IsInitialized
+  {
+    Editor.IsInitialized = true;
     
     Ok :bool;
-    EdCtx.MainFont, Ok = LoadFont(Renderer, "data/fonts/consola.ttf", 20);
+    Editor.MainFont, Ok = LoadFont(Renderer, "data/fonts/consola.ttf", 20);
     if !Ok do logger.log(.Error, "Couldn't Load Font");
   }
   
-  Font := &EdCtx.MainFont;
+  Font := &Editor.MainFont;
   
   // NOTE(fakhri): process input events
   {
-    for Event := EdCtx.Input.First; Event != nil; Event = Event.Next
+    for Event := Editor.Input.First; Event != nil; Event = Event.Next
     {
       switch Event.Kind
       {
         case .Text:
         {
-          if EdCtx.BufferSize < len(EdCtx.Buffer)
+          if Editor.Buffer.Size < len(Editor.Buffer.Data)
           {
-            if EdCtx.Cursor.Offset + 1 < len(EdCtx.Buffer)
-            {
-              mem.copy(dst = &EdCtx.Buffer[EdCtx.Cursor.Offset + 1],
-                       src = &EdCtx.Buffer[EdCtx.Cursor.Offset],
-                       len = EdCtx.BufferSize - EdCtx.Cursor.Offset); 
-            }
-            EdCtx.BufferSize += 1;
-            EdCtx.Buffer[EdCtx.Cursor.Offset] = u8(Event.Char);
-            
-            MoveCursorRight(string(EdCtx.Buffer[:EdCtx.BufferSize]), &EdCtx.Cursor);
+            InsertCharaterToBuffer(&Editor.Buffer, Editor.Cursor.Offset, u8(Event.Char));
+            MoveCursorRight(string(Editor.Buffer.Data[:Editor.Buffer.Size]), &Editor.Cursor);
           }
         }
         case .KeyPress:
@@ -126,42 +154,35 @@ UpdateAndRender :: proc(EdCtx :^editor_context, Renderer : ^render.renderer_cont
           {
             case .Key_Backspace:
             {
-              if EdCtx.BufferSize > 0 && EdCtx.Cursor.Offset > 0
+              if Editor.Buffer.Size > 0 && Editor.Cursor.Offset > 0
               {
-                MoveCursorLeft(string(EdCtx.Buffer[:EdCtx.BufferSize]), &EdCtx.Cursor);
-                
-                if EdCtx.Cursor.Offset + 1 < len(EdCtx.Buffer)
-                {
-                  mem.copy(dst = &EdCtx.Buffer[EdCtx.Cursor.Offset],
-                           src = &EdCtx.Buffer[EdCtx.Cursor.Offset + 1],
-                           len = EdCtx.BufferSize - EdCtx.Cursor.Offset); 
-                }
-                EdCtx.BufferSize    -= 1;
+                MoveCursorLeft(string(Editor.Buffer.Data[:Editor.Buffer.Size]), &Editor.Cursor);
+                DeleteCharacterFromBuffer(&Editor.Buffer, Editor.Cursor.Offset);
               }
             }
             case .Key_Up:
             {
-              if EdCtx.Cursor.Row > 0 do EdCtx.Cursor.Row -= 1;
-              AdjustCursorPos(string(EdCtx.Buffer[:EdCtx.BufferSize]), &EdCtx.Cursor);
+              if Editor.Cursor.Row > 0 do Editor.Cursor.Row -= 1;
+              AdjustCursorPos(string(Editor.Buffer.Data[:Editor.Buffer.Size]), &Editor.Cursor);
             }
             case .Key_Down:
             {
-              EdCtx.Cursor.Row += 1;
-              AdjustCursorPos(string(EdCtx.Buffer[:EdCtx.BufferSize]), &EdCtx.Cursor);
+              Editor.Cursor.Row += 1;
+              AdjustCursorPos(string(Editor.Buffer.Data[:Editor.Buffer.Size]), &Editor.Cursor);
             }
             case .Key_Right:
             {
-              MoveCursorRight(string(EdCtx.Buffer[:EdCtx.BufferSize]), &EdCtx.Cursor)
+              MoveCursorRight(string(Editor.Buffer.Data[:Editor.Buffer.Size]), &Editor.Cursor)
             }
             case .Key_Left:
             {
-              MoveCursorLeft(string(EdCtx.Buffer[:EdCtx.BufferSize]), &EdCtx.Cursor)
+              MoveCursorLeft(string(Editor.Buffer.Data[:Editor.Buffer.Size]), &Editor.Cursor)
             }
             case .Key_LeftMouse:
             {
-              EdCtx.Cursor.Col = int(Event.MouseP.x / Font.GlyphWidth);
-              EdCtx.Cursor.Row = int(Event.MouseP.y / Font.LineAdvance);
-              AdjustCursorPos(string(EdCtx.Buffer[:EdCtx.BufferSize]), &EdCtx.Cursor);
+              Editor.Cursor.Col = int(Event.MouseP.x / Font.GlyphWidth);
+              Editor.Cursor.Row = int(Event.MouseP.y / Font.LineAdvance);
+              AdjustCursorPos(string(Editor.Buffer.Data[:Editor.Buffer.Size]), &Editor.Cursor);
             }
           }
         }
@@ -180,26 +201,25 @@ UpdateAndRender :: proc(EdCtx :^editor_context, Renderer : ^render.renderer_cont
   P := math.V2(0, 0);
   RenderText(Renderer,
              Font,
-             string(EdCtx.Buffer[:EdCtx.BufferSize]), 
+             string(Editor.Buffer.Data[:Editor.Buffer.Size]), 
              math.ToV2u(P),
              render.MakeColor(1));
   
   // NOTE(fakhri): render cursor
   {
     LineGap := Font.LineAdvance - (Font.Ascent - Font.Descent);
-    Pos := EdCtx.Cursor.Pos;
+    Pos := Editor.Cursor.Pos;
     CursorPos := math.V2((f32(Pos.Col) + 0.5) * Font.GlyphWidth, (f32(Pos.Row) + 0.5) * Font.LineAdvance - LineGap);
     render.PushRect(RenderCommands = Renderer, 
                     P  = CursorPos,
                     Size = math.V2(Font.GlyphWidth, Font.Ascent - Font.Descent),
                     Color = render.MakeColor(1));
     
-    if EdCtx.Cursor.Offset < EdCtx.BufferSize 
+    if Editor.Cursor.Offset < Editor.Buffer.Size 
     {
       CharPos := math.V2((f32(Pos.Col)) * Font.GlyphWidth, (f32(Pos.Row) + 0.5) * Font.LineAdvance + LineGap);
-      CharAtCursor := EdCtx.Buffer[EdCtx.Cursor.Offset];
+      CharAtCursor := Editor.Buffer.Data[Editor.Cursor.Offset];
       RenderCharacter(Renderer, Font, rune(CharAtCursor), CharPos, render.MakeColor(0, 0, 0, 1));
     }
   }
-  
 }
