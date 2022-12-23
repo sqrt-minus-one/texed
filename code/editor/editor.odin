@@ -8,7 +8,6 @@ import math "shared:base/math"
 
 /*
  ** TODO(fakhri): things to think about:
-**  - save/load buffers
 **  - history
 **  - scrolling
 */
@@ -23,11 +22,8 @@ editor_context :: struct
   IsInitialized :bool,
   MainFont : font,
   Input  : editor_input,
-  
-  Buffer : text_buffer,
+  Buffer : ^text_buffer,
   FreeChunks :^buffer_chunk,
-  
-  Cursor : cursor,
 }
 
 UpdateAndRender :: proc(Editor :^editor_context, Renderer : ^render.renderer_context)
@@ -39,10 +35,8 @@ UpdateAndRender :: proc(Editor :^editor_context, Renderer : ^render.renderer_con
     Ok :bool;
     Editor.MainFont, Ok = LoadFont(Renderer, "data/fonts/consola.ttf", 20);
     if !Ok do logger.log(.Error, "Couldn't Load Font");
-    
-    Editor.Buffer.Last = &Editor.Buffer.First;
-    Editor.Cursor.ChunkOffset.Chunk = &Editor.Buffer.First;
-    Editor.Cursor.ChunkOffset.Offset = 0;
+    Editor.Buffer, Ok = LoadBufferFromDisk(Editor, "test.txt");
+    assert(Ok)
   }
   
   Font := &Editor.MainFont;
@@ -55,7 +49,7 @@ UpdateAndRender :: proc(Editor :^editor_context, Renderer : ^render.renderer_con
       {
         case .Text:
         {
-          InsertCharaterToBuffer(Editor, &Editor.Cursor, u8(Event.Char));
+          InsertCharaterToBuffer(Editor, &Editor.Buffer.Cursor, u8(Event.Char));
         }
         case .KeyPress:
         {
@@ -63,31 +57,35 @@ UpdateAndRender :: proc(Editor :^editor_context, Renderer : ^render.renderer_con
           {
             case .Key_Backspace:
             {
-              DeleteCharacterFromBuffer(Editor, &Editor.Cursor);
+              DeleteCharacterFromBuffer(Editor, &Editor.Buffer.Cursor);
             }
             case .Key_Up:
             {
-              if Editor.Cursor.Row > 0 do Editor.Cursor.Row -= 1;
-              AdjustCursorPos(&Editor.Buffer, &Editor.Cursor);
+              if Editor.Buffer.Cursor.Row > 0 do Editor.Buffer.Cursor.Row -= 1;
+              AdjustCursorPos(Editor.Buffer);
             }
             case .Key_Down:
             {
-              Editor.Cursor.Row += 1;
-              AdjustCursorPos(&Editor.Buffer, &Editor.Cursor);
+              Editor.Buffer.Cursor.Row += 1;
+              AdjustCursorPos(Editor.Buffer);
             }
             case .Key_Right:
             {
-              MoveCursorRight(&Editor.Buffer, &Editor.Cursor)
+              MoveCursorRight(Editor.Buffer)
             }
             case .Key_Left:
             {
-              MoveCursorLeft(&Editor.Buffer, &Editor.Cursor)
+              MoveCursorLeft(Editor.Buffer)
             }
             case .Key_LeftMouse:
             {
-              Editor.Cursor.Col = int(Event.MouseP.x / Font.GlyphWidth);
-              Editor.Cursor.Row = int(Event.MouseP.y / Font.LineAdvance);
-              AdjustCursorPos(&Editor.Buffer, &Editor.Cursor);
+              Editor.Buffer.Cursor.Col = int(Event.MouseP.x / Font.GlyphWidth);
+              Editor.Buffer.Cursor.Row = int(Event.MouseP.y / Font.LineAdvance);
+              AdjustCursorPos(Editor.Buffer);
+            }
+            case .Key_Esc:
+            {
+              SaveBufferToDisk(Editor, Editor.Buffer);
             }
           }
         }
@@ -106,17 +104,17 @@ UpdateAndRender :: proc(Editor :^editor_context, Renderer : ^render.renderer_con
   P := math.V2(0, 0);
   RenderBuffer(Renderer,
                Font,
-               &Editor.Buffer, 
+               Editor.Buffer, 
                math.ToV2u(P),
                render.MakeColor(1));
   
   // NOTE(fakhri): render cursor
   {
-    Chunk  := Editor.Cursor.ChunkOffset.Chunk;
-    Offset := Editor.Cursor.ChunkOffset.Offset;
+    Chunk  := Editor.Buffer.Cursor.ChunkOffset.Chunk;
+    Offset := Editor.Buffer.Cursor.ChunkOffset.Offset;
     
     LineGap := Font.LineAdvance - (Font.Ascent - Font.Descent);
-    Pos := Editor.Cursor.Pos;
+    Pos := Editor.Buffer.Cursor.Pos;
     CursorPos := math.V2((f32(Pos.Col) + 0.5) * Font.GlyphWidth, (f32(Pos.Row) + 0.5) * Font.LineAdvance - LineGap);
     render.PushRect(RenderCommands = Renderer, 
                     P  = CursorPos,

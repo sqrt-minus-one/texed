@@ -8,8 +8,10 @@ cursor :: struct
 }
 
 
-AdjustCursorPos :: proc(Buffer : ^text_buffer, Cursor : ^cursor)
+AdjustCursorPos :: proc(Buffer : ^text_buffer)
 {
+  Cursor := &Buffer.Cursor;
+  
   SafePos, NextPos : screen_position;
   SafeChunk :^buffer_chunk;
   SafeOffset :int;
@@ -39,8 +41,9 @@ AdjustCursorPos :: proc(Buffer : ^text_buffer, Cursor : ^cursor)
   Cursor.ChunkOffset.Chunk = SafeChunk;
 }
 
-MoveCursorRight :: proc(Buffer : ^text_buffer, Cursor : ^cursor)
+MoveCursorRight :: proc(Buffer : ^text_buffer)
 {
+  Cursor := &Buffer.Cursor;
   Chunk  := Cursor.ChunkOffset.Chunk;
   Offset := Cursor.ChunkOffset.Offset;
   
@@ -66,7 +69,7 @@ MoveCursorRight :: proc(Buffer : ^text_buffer, Cursor : ^cursor)
   {
     Cursor.ChunkOffset.Chunk = Chunk.Next;
     Cursor.ChunkOffset.Offset = 0;
-    MoveCursorRight(Buffer, Cursor);
+    MoveCursorRight(Buffer);
   }
   else
   {
@@ -74,8 +77,9 @@ MoveCursorRight :: proc(Buffer : ^text_buffer, Cursor : ^cursor)
   }
 }
 
-MoveCursorLeft :: proc(Buffer : ^text_buffer, Cursor : ^cursor) -> (Ok : bool)
+MoveCursorLeft :: proc(Buffer : ^text_buffer) -> (Ok : bool)
 {
+  Cursor := &Buffer.Cursor;
   Chunk  := Cursor.ChunkOffset.Chunk;
   Offset := Cursor.ChunkOffset.Offset;
   
@@ -91,14 +95,14 @@ MoveCursorLeft :: proc(Buffer : ^text_buffer, Cursor : ^cursor) -> (Ok : bool)
       // TODO(fakhri): pick a safe big number
       Cursor.Col = 100_000;
       if Cursor.Row > 0 do Cursor.Row -= 1;
-      AdjustCursorPos(Buffer, Cursor);
+      AdjustCursorPos(Buffer);
     }
   }
   else if Chunk.Prev != nil
   {
     Cursor.ChunkOffset.Chunk = Chunk.Prev;
     Cursor.ChunkOffset.Offset = Chunk.Prev.UsedSpace;
-    Ok = MoveCursorLeft(Buffer, Cursor);
+    Ok = MoveCursorLeft(Buffer);
   }
   else
   {
