@@ -42,7 +42,7 @@ RenderBuffer :: proc(Renderer : ^render.renderer_context,
       for Ch in Text
       {
         CharColor := Color;
-        if Ch == '\r' || Ch == '\n'
+        if Ch == '\n'
         {
           TextPos.y += Font.LineAdvance;
           TextPos.x  = 0;

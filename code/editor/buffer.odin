@@ -1,5 +1,6 @@
 package editor
 
+import "shared:base"
 import "core:os"
 import "core:mem"
 
@@ -9,7 +10,20 @@ buffer_chunk_offset :: struct
   Offset : int, // NOTE(fakhri): offset in the chunk
 }
 
-CHUNK_CAPACITY :: 1024
+// NOTE(fakhri): if we want to support projects with lot of 
+// files we should find out a way to handle memory
+// if for example we want to support editing the linux kernel
+// that have around 20'000 files, loading all of the files to memory 
+// at all times assuming the chunk size is 16kb and we assume
+// that we only need one chunk for each file (this is obviously not true
+// as there are files bigger than 16kb in size) then a back of the envolope 
+// computation shows that we need 20'000 * 16kb= 320'000kb = 312mb
+// this is an acceptable cost, but if things went out of control we
+// must think of an alternative solution, one idea worth investigating
+// is to only keep modified buffers in memory because the number of modified 
+// buffers tends to be lower than the total number of buffers in a project
+
+CHUNK_CAPACITY :: 16 * base.Kilobyte
 
 buffer_chunk :: struct
 {
@@ -24,7 +38,9 @@ text_buffer :: struct
   First : buffer_chunk,
   Last  : ^buffer_chunk,
   
+  Size : int,
   Cursor : cursor,
+  Lines : buffer_lines,
   Path : string,
 }
 
@@ -36,6 +52,7 @@ LoadBufferFromDisk :: proc(Editor : ^editor_context, Path : string) -> (Buffer :
   Chunk := &Buffer.First;
   for len(FileContent) != 0
   {
+    Buffer.Size = len(FileContent);
     if Chunk.UsedSpace == CHUNK_CAPACITY
     {
       Chunk.Next = MakeBufferChunk(Editor);
@@ -53,6 +70,7 @@ LoadBufferFromDisk :: proc(Editor : ^editor_context, Path : string) -> (Buffer :
   
   Ok = true;
   Buffer.Path = Path;
+  BuildBufferLines(Buffer);
   return;
 }
 
@@ -77,8 +95,6 @@ MakeBuffer :: proc(Editor : ^editor_context) -> (Buffer : ^text_buffer)
   Buffer = new(text_buffer);
   // TODO(fakhri): reuse buffers
   Buffer.Last = &Buffer.First;
-  Buffer.Cursor.ChunkOffset.Chunk = &Buffer.First;
-  Buffer.Cursor.ChunkOffset.Offset = 0;
   return;
 }
 
@@ -94,9 +110,11 @@ MakeBufferChunk :: proc(Editor : ^editor_context) -> (Chunk : ^buffer_chunk)
   return;
 }
 
-InsertCharaterToBuffer :: proc(Editor : ^editor_context, Cursor : ^cursor, Char : u8)
+InsertCharaterToBuffer :: proc(Editor : ^editor_context, Buffer : ^text_buffer, Char : u8)
 {
-  ChunkOffset := &Cursor.ChunkOffset;
+  // NOTE(fakhri): ignore windows \r bs
+  if Char == '\r' do return;
+  ChunkOffset := GetBufferOffsetFromCursor(Buffer);
   if ChunkOffset.Offset == CHUNK_CAPACITY
   {
     if ChunkOffset.Chunk.Next != nil
@@ -108,15 +126,17 @@ InsertCharaterToBuffer :: proc(Editor : ^editor_context, Cursor : ^cursor, Char 
   
   if ChunkOffset.Chunk.UsedSpace == CHUNK_CAPACITY
   {
+    // TODO(fakhri): see if we can use the next chunk instead of 
+    // creating a new one
+    
     // NOTE(fakhri): create a new chunk and add it to the buffer
     // right after chunk
-    
     NewChunk := MakeBufferChunk(Editor);
     assert(NewChunk != nil);
     
-    if ChunkOffset.Chunk == Editor.Buffer.Last
+    if ChunkOffset.Chunk == Buffer.Last
     {
-      Editor.Buffer.Last = NewChunk;
+      Buffer.Last = NewChunk;
     }
     
     NewChunk.Prev = ChunkOffset.Chunk;
@@ -151,12 +171,14 @@ InsertCharaterToBuffer :: proc(Editor : ^editor_context, Cursor : ^cursor, Char 
   }
   ChunkOffset.Chunk.UsedSpace += 1;
   ChunkOffset.Chunk.Data[ChunkOffset.Offset] = Char;
-  MoveCursorRight(Editor.Buffer);
+  Buffer.Size += 1;
+  BuildBufferLines(Buffer);
+  MoveCursorRight(Buffer);
 }
 
-DeleteCharacterFromBuffer :: proc(Editor : ^editor_context, Cursor : ^cursor)
+DeleteCharacterFromBuffer :: proc(Editor : ^editor_context, Buffer :^text_buffer)
 {
-  ChunkOffset := &Cursor.ChunkOffset;
+  ChunkOffset := GetBufferOffsetFromCursor(Buffer);
   
   if ChunkOffset.Chunk.UsedSpace == 0
   {
@@ -176,8 +198,6 @@ DeleteCharacterFromBuffer :: proc(Editor : ^editor_context, Cursor : ^cursor)
         PrevChunk.Next = ChunkToFree.Next;
         PrevChunk.Next.Prev = PrevChunk;
       }
-      Cursor.ChunkOffset.Chunk = PrevChunk;
-      Cursor.ChunkOffset.Offset = PrevChunk.UsedSpace;
     }
     else
     {
@@ -194,8 +214,6 @@ DeleteCharacterFromBuffer :: proc(Editor : ^editor_context, Cursor : ^cursor)
           // chunk
           ChunkToFree.Next.Prev = &Editor.Buffer.First;
         }
-        Cursor.ChunkOffset.Chunk = &Editor.Buffer.First;
-        Cursor.ChunkOffset.Offset = 0;
       }
       else
       {
@@ -211,20 +229,18 @@ DeleteCharacterFromBuffer :: proc(Editor : ^editor_context, Cursor : ^cursor)
     }
   }
   
-  if ChunkOffset.Chunk.UsedSpace > 0 && MoveCursorLeft(Editor.Buffer)
+  if ChunkOffset.Chunk.UsedSpace > 0 && Buffer.Cursor > 0
   {
-    if ChunkOffset.Offset + 1 < CHUNK_CAPACITY
+    // TODO(fakhri): test with multi chunks
+    if ChunkOffset.Offset > 0
     {
-      mem.copy(dst = &ChunkOffset.Chunk.Data[ChunkOffset.Offset],
-               src = &ChunkOffset.Chunk.Data[ChunkOffset.Offset + 1],
+      mem.copy(dst = &ChunkOffset.Chunk.Data[ChunkOffset.Offset - 1],
+               src = &ChunkOffset.Chunk.Data[ChunkOffset.Offset],
                len = ChunkOffset.Chunk.UsedSpace - ChunkOffset.Offset); 
     }
     ChunkOffset.Chunk.UsedSpace -= 1;
-  }
-  
-  if ChunkOffset.Offset == ChunkOffset.Chunk.UsedSpace && ChunkOffset.Chunk.Next != nil
-  {
-    ChunkOffset.Chunk = ChunkOffset.Chunk.Next;
-    ChunkOffset.Offset = 0;
+    Buffer.Size -= 1;
+    BuildBufferLines(Buffer);
+    MoveCursorLeft(Buffer);
   }
 }

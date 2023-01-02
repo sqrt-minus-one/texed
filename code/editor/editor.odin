@@ -8,11 +8,14 @@ import math "shared:base/math"
 
 /*
  ** TODO(fakhri): things to think about:
-**  - history
+**  - handle TABs
 **  - scrolling
+**  - better cr/lf handling
+**  - better buffer rendering
+**  - history
 */
 
-screen_position :: struct
+buffer_position :: struct
 {
   Row, Col : int,
 }
@@ -33,14 +36,14 @@ UpdateAndRender :: proc(Editor :^editor_context, Renderer : ^render.renderer_con
     Editor.IsInitialized = true;
     
     Ok :bool;
-    Editor.MainFont, Ok = LoadFont(Renderer, "data/fonts/consola.ttf", 20);
+    Editor.MainFont, Ok = LoadFont(Renderer, "data/fonts/consola.ttf", 14);
     if !Ok do logger.log(.Error, "Couldn't Load Font");
-    Editor.Buffer, Ok = LoadBufferFromDisk(Editor, "test.txt");
+    Editor.Buffer, Ok = LoadBufferFromDisk(Editor, "test.c");
     assert(Ok)
   }
   
   Font := &Editor.MainFont;
-  
+  Buffer := Editor.Buffer;
   // NOTE(fakhri): process input events
   {
     for Event := Editor.Input.First; Event != nil; Event = Event.Next
@@ -49,7 +52,7 @@ UpdateAndRender :: proc(Editor :^editor_context, Renderer : ^render.renderer_con
       {
         case .Text:
         {
-          InsertCharaterToBuffer(Editor, &Editor.Buffer.Cursor, u8(Event.Char));
+          InsertCharaterToBuffer(Editor, Buffer, u8(Event.Char));
         }
         case .KeyPress:
         {
@@ -57,35 +60,33 @@ UpdateAndRender :: proc(Editor :^editor_context, Renderer : ^render.renderer_con
           {
             case .Key_Backspace:
             {
-              DeleteCharacterFromBuffer(Editor, &Editor.Buffer.Cursor);
+              DeleteCharacterFromBuffer(Editor, Buffer);
             }
             case .Key_Up:
             {
-              if Editor.Buffer.Cursor.Row > 0 do Editor.Buffer.Cursor.Row -= 1;
-              AdjustCursorPos(Editor.Buffer);
+              MoveCursorUp(Buffer);
             }
             case .Key_Down:
             {
-              Editor.Buffer.Cursor.Row += 1;
-              AdjustCursorPos(Editor.Buffer);
+              MoveCursorDown(Buffer);
             }
             case .Key_Right:
             {
-              MoveCursorRight(Editor.Buffer)
+              MoveCursorRight(Buffer)
             }
             case .Key_Left:
             {
-              MoveCursorLeft(Editor.Buffer)
+              MoveCursorLeft(Buffer)
             }
             case .Key_LeftMouse:
             {
-              Editor.Buffer.Cursor.Col = int(Event.MouseP.x / Font.GlyphWidth);
-              Editor.Buffer.Cursor.Row = int(Event.MouseP.y / Font.LineAdvance);
-              AdjustCursorPos(Editor.Buffer);
+              Col := int(Event.MouseP.x / Font.GlyphWidth);
+              Row := int(Event.MouseP.y / Font.LineAdvance);
+              Buffer.Cursor = OffsetFromRowCol(Buffer, Row, Col);
             }
             case .Key_Esc:
             {
-              SaveBufferToDisk(Editor, Editor.Buffer);
+              SaveBufferToDisk(Editor, Buffer);
             }
           }
         }
@@ -104,25 +105,26 @@ UpdateAndRender :: proc(Editor :^editor_context, Renderer : ^render.renderer_con
   P := math.V2(0, 0);
   RenderBuffer(Renderer,
                Font,
-               Editor.Buffer, 
+               Buffer, 
                math.ToV2u(P),
                render.MakeColor(1));
   
   // NOTE(fakhri): render cursor
   {
-    Chunk  := Editor.Buffer.Cursor.ChunkOffset.Chunk;
-    Offset := Editor.Buffer.Cursor.ChunkOffset.Offset;
-    
     LineGap := Font.LineAdvance - (Font.Ascent - Font.Descent);
-    Pos := Editor.Buffer.Cursor.Pos;
+    Pos := GetBufferPos(Buffer, Buffer.Cursor);
     CursorPos := math.V2((f32(Pos.Col) + 0.5) * Font.GlyphWidth, (f32(Pos.Row) + 0.5) * Font.LineAdvance - LineGap);
     render.PushRect(RenderCommands = Renderer, 
                     P  = CursorPos,
                     Size = math.V2(Font.GlyphWidth, Font.Ascent - Font.Descent),
                     Color = render.MakeColor(1));
     
-    if Offset < Chunk.UsedSpace 
+    if Buffer.Cursor < Buffer.Size 
     {
+      ChunkOffset := GetBufferOffsetFromCursor(Buffer);
+      Chunk  := ChunkOffset.Chunk;
+      Offset := ChunkOffset.Offset;
+      
       CharPos := math.V2((f32(Pos.Col)) * Font.GlyphWidth, (f32(Pos.Row) + 0.5) * Font.LineAdvance + LineGap);
       CharAtCursor := Chunk.Data[Offset];
       RenderCharacter(Renderer, Font, rune(CharAtCursor), CharPos, render.MakeColor(0, 0, 0, 1));

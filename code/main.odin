@@ -114,8 +114,8 @@ ProcessPendingMessages :: proc(Input :^ed.editor_input, Allocator :mem.Allocator
       case WM_CHAR, WM_SYSCHAR:
       {
         CharInput := rune(Msg.wParam);
-        
-        if (CharInput >= 32 && CharInput != 127) || CharInput == '\t' || CharInput == '\n' || CharInput == '\r'
+        if CharInput == '\r' do CharInput = '\n';
+        if (CharInput >= 32 && CharInput != 127) || CharInput == '\t' || CharInput == '\n'
         {
           Event = ed.MakeInputEvent(Input, Allocator);
           Event.Kind = .Text;
