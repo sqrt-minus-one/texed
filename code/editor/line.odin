@@ -3,7 +3,7 @@ package editor
 
 buffer_lines :: struct
 {
-  Offsets : [5000]int,
+  Offsets : [10_000]int,
   Count : int,
 }
 
@@ -36,24 +36,22 @@ OffsetFromRowCol :: proc(Buffer : ^text_buffer, Row : int, Col : int) -> (Result
   return;
 }
 
-BuildBufferLines :: proc(Buffer :^text_buffer)
+MakeBufferLines :: proc(Buffer :^text_buffer)
 {
   Buffer.Lines.Offsets[0] = 0;
   Buffer.Lines.Count = 1;
   
   TotalOffset := 0;
-  for Chunk := &Buffer.First; Chunk != nil; Chunk = Chunk.Next
+  
+  Text := string(Buffer.Data[:Buffer.Size]);
+  for Ch, ChIndex in Text
   {
-    Text := string(Chunk.Data[:Chunk.UsedSpace]);
-    for Ch, ChIndex in Text
+    if Ch == '\n'
     {
-      if Ch == '\n'
-      {
-        assert(Buffer.Lines.Count < len(Buffer.Lines.Offsets));
-        Buffer.Lines.Offsets[Buffer.Lines.Count] = TotalOffset + 1;
-        Buffer.Lines.Count += 1;
-      }
-      TotalOffset += 1;
+      assert(Buffer.Lines.Count < len(Buffer.Lines.Offsets));
+      Buffer.Lines.Offsets[Buffer.Lines.Count] = TotalOffset + 1;
+      Buffer.Lines.Count += 1;
     }
+    TotalOffset += 1;
   }
 }

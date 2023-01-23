@@ -107,5 +107,4 @@ EndFrame :: proc(GLContext : ^gl_context)
     }
   }
   assert(HeaderOffset == RenderCommands.Offset);
-  
 }

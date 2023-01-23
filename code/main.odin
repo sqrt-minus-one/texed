@@ -182,6 +182,10 @@ main:: proc()
     hCursor = LoadCursorA(nil, IDC_ARROW),
   }
   
+  RefreshRate :: 60;
+  TargetFramePerSeconds := RefreshRate;
+  dtForFrame := 1.0 / RefreshRate;
+  
   if RegisterClassW(&window_class) != 0
   {
     WindowHandle := CreateWindowExW(dwExStyle = {},
@@ -210,6 +214,7 @@ main:: proc()
     for 
     {
       free_all(context.temp_allocator);
+      
       ProcessPendingMessages(&Editor.Input);
       if GlobalRequestClose
       {
@@ -227,7 +232,7 @@ main:: proc()
       }
       
       renderer.BeginRendererFrame(Renderer, ScreenDim);
-      ed.UpdateAndRender(Editor, Renderer);
+      ed.UpdateAndRender(Editor, Renderer, f32(dtForFrame));
       renderer.EndRendererFrame(Renderer);
       
       ed.ClearAllEvents(&Editor.Input);

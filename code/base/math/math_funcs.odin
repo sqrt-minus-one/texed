@@ -1,5 +1,6 @@
 package base_math
 
+import "core:math"
 import alg "core:math/linalg"
 
 V3 :: proc (X, Y, Z : f32) -> (Out: v3)
@@ -87,5 +88,11 @@ Translate:: proc(T : v3) -> (Result: m4x4)
 Scale :: proc(S : v3) -> (Result: m4x4)
 {
   Result = alg.matrix4_scale(alg.Vector3f32(S));
+  return;
+}
+
+Sin :: proc(In: f32) -> (Out: f32)
+{
+  Out = math.sin(In);
   return;
 }
