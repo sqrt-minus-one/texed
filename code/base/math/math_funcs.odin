@@ -96,3 +96,9 @@ Sin :: proc(In: f32) -> (Out: f32)
   Out = math.sin(In);
   return;
 }
+
+Square :: proc(In: f32) -> (Out: f32)
+{
+  Out = In * In;
+  return;
+}

@@ -215,7 +215,12 @@ main:: proc()
     {
       free_all(context.temp_allocator);
       
-      ProcessPendingMessages(&Editor.Input);
+      // NOTE(fakhri): events
+      {
+        ed.ClearAllEvents(&Editor.Input);
+        ProcessPendingMessages(&Editor.Input);
+      }
+      
       if GlobalRequestClose
       {
         break;
@@ -235,7 +240,7 @@ main:: proc()
       ed.UpdateAndRender(Editor, Renderer, f32(dtForFrame));
       renderer.EndRendererFrame(Renderer);
       
-      ed.ClearAllEvents(&Editor.Input);
+      // TODO(fakhri): frame cap
     }
   }
 }

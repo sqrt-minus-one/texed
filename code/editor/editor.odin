@@ -101,7 +101,26 @@ UpdateAndRender :: proc(Editor: ^editor_context, Renderer: ^render.renderer_cont
   
   Editor.Time += dtForFrame;
   
-  CameraP := math.V2(50, 250 * math.Sin(2 * Editor.Time));
+  // NOTE(fakhri): try to keep the camera following the cursor
+  {
+    VisibleLinesCount := Height / Font.LineAdvance;
+    
+    CursorPos := GetBufferPos(Buffer, Buffer.Cursor);
+    Edge := Buffer.Camera.TargetP.y + VisibleLinesCount / 2;
+    if Edge < f32(CursorPos.Row)
+    {
+      Buffer.Camera.TargetP.y = f32(CursorPos.Row - 5);
+    }
+    
+    if f32(CursorPos.Row) < Buffer.Camera.TargetP.y
+    {
+      Buffer.Camera.TargetP.y = f32(CursorPos.Row);
+    }
+    UpdateCamera(&Buffer.Camera, dtForFrame);
+  }
+  
+  CameraP := Buffer.Camera.P;
+  CameraP.y *= -Font.LineAdvance;
   Clip := GetClipMatrix(CameraP, Width, Height);
   render.PushClipMatrix(Renderer, Clip);
   

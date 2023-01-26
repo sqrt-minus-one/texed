@@ -1,6 +1,7 @@
 package editor
 
 import "shared:base"
+import "shared:base/math"
 import "core:os"
 import "core:mem"
 
@@ -13,6 +14,7 @@ text_buffer :: struct
   Cursor: cursor,
   Lines: buffer_lines,
   Path: string,
+  Camera: camera,
 }
 
 LoadBufferFromDisk :: proc(Editor : ^editor_context, Path : string) -> (Buffer : ^text_buffer, Ok : bool)
