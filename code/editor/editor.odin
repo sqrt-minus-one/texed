@@ -4,11 +4,12 @@ import logger "core:log"
 import "core:fmt"
 import "core:mem"
 import "shared:render"
-import math "shared:base/math"
+import "shared:base/math"
 
 /*
  ** TODO(fakhri): things to think about:
-**  - scrolling
+**  - keymaps
+**  - multi buffer support
 **  - better cr/lf handling
 **  - better buffer rendering
 **  - history
@@ -94,33 +95,45 @@ UpdateAndRender :: proc(Editor: ^editor_context, Renderer: ^render.renderer_cont
     }
   }
   
+  Editor.Time += dtForFrame;
+  
   render.PushClearColor(Renderer, 0, 0, 0, 1);
   
   Width  := f32(Renderer.ScreenDim.x);
   Height := f32(Renderer.ScreenDim.y);
   
-  Editor.Time += dtForFrame;
   
   // NOTE(fakhri): try to keep the camera following the cursor
   {
     VisibleLinesCount := Height / Font.LineAdvance;
+    VisibleCharsCount := Width / Font.GlyphWidth;
     
     CursorPos := GetBufferPos(Buffer, Buffer.Cursor);
-    Edge := Buffer.Camera.TargetP.y + VisibleLinesCount / 2;
-    if Edge < f32(CursorPos.Row)
+    if f32(CursorPos.Row) - Buffer.Camera.TargetP.y > VisibleLinesCount / 2
     {
-      Buffer.Camera.TargetP.y = f32(CursorPos.Row - 5);
+      Buffer.Camera.TargetP.y = f32(CursorPos.Row) - VisibleLinesCount / 4;
+    }
+    
+    if f32(CursorPos.Col) - Buffer.Camera.TargetP.x > 3 * VisibleCharsCount / 4
+    {
+      Buffer.Camera.TargetP.x = f32(CursorPos.Col) - VisibleCharsCount / 2;
     }
     
     if f32(CursorPos.Row) < Buffer.Camera.TargetP.y
     {
       Buffer.Camera.TargetP.y = f32(CursorPos.Row);
     }
-    UpdateCamera(&Buffer.Camera, dtForFrame);
+    if f32(CursorPos.Col) < Buffer.Camera.TargetP.x
+    {
+      Buffer.Camera.TargetP.x = f32(CursorPos.Col);
+    }
+    
+    UpdateCameraPos(&Buffer.Camera, dtForFrame);
   }
   
   CameraP := Buffer.Camera.P;
   CameraP.y *= -Font.LineAdvance;
+  CameraP.x *= -Font.GlyphWidth;
   Clip := GetClipMatrix(CameraP, Width, Height);
   render.PushClipMatrix(Renderer, Clip);
   
@@ -131,5 +144,4 @@ UpdateAndRender :: proc(Editor: ^editor_context, Renderer: ^render.renderer_cont
                Buffer, 
                math.ToV2u(P),
                render.MakeColor(1));
-  
 }
